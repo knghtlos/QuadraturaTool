@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Offer {
+  id               String       @id @default(cuid())
+  externalId       String?      @unique
+  nome             String?
+  progetto         String?
+  anno             Int?
+  stato            String?
+  rey              String?
+  importoInOfferta Decimal?     @db.Decimal(14, 2)
+  preparaOfferta   Boolean      @default(false)
+  extra            Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  budgetLines      BudgetLine[]
+
+  @@index([anno])
+  @@index([progetto])
+  @@index([stato])
+}
+
+model Activity {
+  id                String        @id @default(cuid())
+  externalId        String?       @unique
+  project           String
+  attivita          String?
+  dataIniziativa    DateTime?
+  release           String?
+  refLuxottica      String?
+  codiceRey         String?
+  refStima          String?
+  stato             String?
+  importo           Decimal?      @db.Decimal(14, 2)
+  importoScontato   Decimal?      @db.Decimal(14, 2)
+  scontoPercent     Decimal?      @db.Decimal(7, 4)
+  b2bCtia           Decimal?      @db.Decimal(14, 2)
+  fe                Decimal?      @db.Decimal(14, 2)
+  cms               Decimal?      @db.Decimal(14, 2)
+  bff               Decimal?      @db.Decimal(14, 2)
+  ctiaDevops        Decimal?      @db.Decimal(14, 2)
+  b2c               Decimal?      @db.Decimal(14, 2)
+  altriTeam         Decimal?      @db.Decimal(14, 2)
+  riferimentoStima  String?
+  oldStima          String?
+  extra             Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  budgetLines       BudgetLine[]
+
+  @@index([project])
+  @@index([stato])
+  @@index([codiceRey])
+}
+
+model BudgetLine {
+  id          String    @id @default(cuid())
+  externalId  String?
+  sheet       String
+  nome        String?
+  stato       String?
+  importo     Decimal?  @db.Decimal(14, 2)
+  activityId  String?
+  commessaId  String?
+  offerId     String?
+  extra       Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  activity    Activity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  commessa    Commessa?  @relation(fields: [commessaId], references: [id], onDelete: SetNull)
+  offer       Offer?     @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@unique([sheet, externalId])
+  @@index([sheet])
+  @@index([stato])
+  @@index([activityId])
+  @@index([commessaId])
+  @@index([offerId])
+}
+
+model Commessa {
+  id          String       @id @default(cuid())
+  externalId  String?      @unique
+  anno        Int?
+  nome        String?
+  codice      String?
+  progetto    String?
+  bu          String?
+  tipologia   String?
+  stato       String?
+  extra       Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  budgetLines BudgetLine[]
+
+  @@index([anno])
+  @@index([progetto])
+  @@index([bu])
+  @@index([stato])
+}
+
+model ConfigOption {
+  id        String   @id @default(cuid())
+  type      String
+  value     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, value])
+  @@index([type])
+}

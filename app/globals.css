@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --background: 0 0% 99%;
+  --foreground: 224 24% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 24% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 24% 12%;
+  --primary: 191 84% 28%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 43 60% 93%;
+  --secondary-foreground: 224 24% 14%;
+  --muted: 210 18% 94%;
+  --muted-foreground: 224 12% 42%;
+  --accent: 156 26% 89%;
+  --accent-foreground: 164 46% 18%;
+  --destructive: 0 72% 47%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 18% 86%;
+  --input: 214 18% 86%;
+  --ring: 191 84% 28%;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  background: hsl(var(--background));
+}
+
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(250, 252, 252, 0.94), rgba(244, 247, 246, 0.96)),
+    hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.18);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
