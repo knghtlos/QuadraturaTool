@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { decimalToNumber, parseJsonObject, toBoolean, toDate, toDecimal, toInteger, toStringOrNull } from "@/lib/coercion";
+import { decimalToNumber, parseJsonObject, toDate, toDecimal, toInteger, toStringOrNull } from "@/lib/coercion";
 import { configTypes, getSheetConfig, isSheetKey, type SheetConfig, type SheetKey } from "@/lib/sheets";
 import { prisma } from "@/lib/prisma";
 
@@ -38,23 +38,18 @@ function budgetLineTotal(lines: Array<{ importo: Prisma.Decimal | number | strin
 }
 
 function mapOffer(offer: Prisma.OfferGetPayload<{ include: { budgetLines: true } }>) {
-  const importoFinale = budgetLineTotal(offer.budgetLines);
+  const importoApprovato = decimalToNumber(offer.importoApprovato);
   const importoInOfferta = decimalToNumber(offer.importoInOfferta);
+  const codice = offer.codice ?? offer.nome;
 
   return {
     id: offer.id,
     externalId: offer.externalId,
-    nome: offer.nome,
+    codice,
     progetto: offer.progetto,
     anno: offer.anno,
-    stato: offer.stato,
-    rey: offer.rey,
-    importoFinale,
+    importoApprovato,
     importoInOfferta,
-    sconto: importoInOfferta - importoFinale,
-    preparaOfferta: offer.preparaOfferta,
-    budgetLineCount: offer.budgetLines.length,
-    extra: offer.extra,
     updatedAt: offer.updatedAt.toISOString()
   };
 }
@@ -96,9 +91,7 @@ function mapBudgetLine(
   return {
     id: line.id,
     externalId: line.externalId,
-    sheet: line.sheet,
     nome: line.nome,
-    stato: line.stato,
     activityId: line.activityId,
     activityLabel: line.activity
       ? relationLabel([line.activity.externalId, line.activity.attivita, line.activity.project])
@@ -106,30 +99,19 @@ function mapBudgetLine(
     commessaId: line.commessaId,
     commessaLabel: line.commessa ? relationLabel([line.commessa.codice, line.commessa.nome]) : null,
     offerId: line.offerId,
-    offerLabel: line.offer ? relationLabel([line.offer.externalId, line.offer.nome]) : null,
+    offerLabel: line.offer ? relationLabel([line.offer.externalId, line.offer.codice ?? line.offer.nome]) : null,
     importo: decimalToNumber(line.importo),
-    extra: line.extra,
     updatedAt: line.updatedAt.toISOString()
   };
 }
 
 function mapCommessa(commessa: Prisma.CommessaGetPayload<{ include: { budgetLines: true } }>) {
-  const nomeCodice = relationLabel([commessa.codice, commessa.nome]);
-
   return {
     id: commessa.id,
     externalId: commessa.externalId,
-    anno: commessa.anno,
-    nome: commessa.nome,
     codice: commessa.codice,
-    nomeCodice,
-    progetto: commessa.progetto,
-    bu: commessa.bu,
-    budget: budgetLineTotal(commessa.budgetLines),
-    tipologia: commessa.tipologia,
-    stato: commessa.stato,
-    budgetLineCount: commessa.budgetLines.length,
-    extra: commessa.extra,
+    nome: commessa.nome,
+    anno: commessa.anno,
     updatedAt: commessa.updatedAt.toISOString()
   };
 }
@@ -140,7 +122,7 @@ export async function getRecords(sheetKey: SheetKey): Promise<GovernanceRecord[]
   if (config.kind === "offers") {
     const offers = await prisma.offer.findMany({
       include: { budgetLines: true },
-      orderBy: [{ updatedAt: "desc" }, { nome: "asc" }]
+      orderBy: [{ updatedAt: "desc" }, { codice: "asc" }]
     });
     return offers.map(mapOffer);
   }
@@ -176,7 +158,7 @@ export async function getRecords(sheetKey: SheetKey): Promise<GovernanceRecord[]
 
 export async function getLookups(): Promise<LookupPayload> {
   const [offers, activities, commesse, options] = await Promise.all([
-    prisma.offer.findMany({ orderBy: [{ anno: "desc" }, { nome: "asc" }] }),
+    prisma.offer.findMany({ orderBy: [{ anno: "desc" }, { codice: "asc" }] }),
     prisma.activity.findMany({ orderBy: [{ project: "asc" }, { attivita: "asc" }] }),
     prisma.commessa.findMany({ orderBy: [{ anno: "desc" }, { codice: "asc" }] }),
     prisma.configOption.findMany({ orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { value: "asc" }] })
@@ -192,7 +174,7 @@ export async function getLookups(): Promise<LookupPayload> {
     lookups: {
       offers: offers.map((offer) => ({
         id: offer.id,
-        label: relationLabel([offer.externalId, offer.nome]),
+        label: relationLabel([offer.externalId, offer.codice ?? offer.nome]),
         meta: relationLabel([offer.progetto, offer.anno])
       })),
       activities: activities.map((activity) => ({
@@ -227,10 +209,6 @@ function maybeSetDate(data: Record<string, unknown>, values: Record<string, unkn
   if (Object.prototype.hasOwnProperty.call(values, key)) data[key] = toDate(values[key]);
 }
 
-function maybeSetBoolean(data: Record<string, unknown>, values: Record<string, unknown>, key: string) {
-  if (Object.prototype.hasOwnProperty.call(values, key)) data[key] = toBoolean(values[key]);
-}
-
 function maybeSetJson(data: Record<string, unknown>, values: Record<string, unknown>, key: string) {
   if (!Object.prototype.hasOwnProperty.call(values, key)) return;
   const parsed = parseJsonObject(values[key]);
@@ -240,14 +218,14 @@ function maybeSetJson(data: Record<string, unknown>, values: Record<string, unkn
 function offerData(values: Record<string, unknown>) {
   const data: Record<string, unknown> = {};
   maybeSetText(data, values, "externalId");
-  maybeSetText(data, values, "nome");
+  maybeSetText(data, values, "codice");
+  if (Object.prototype.hasOwnProperty.call(values, "codice")) {
+    data.nome = data.codice;
+  }
   maybeSetText(data, values, "progetto");
   maybeSetInt(data, values, "anno");
-  maybeSetText(data, values, "stato");
-  maybeSetText(data, values, "rey");
+  maybeSetDecimal(data, values, "importoApprovato");
   maybeSetDecimal(data, values, "importoInOfferta");
-  maybeSetBoolean(data, values, "preparaOfferta");
-  maybeSetJson(data, values, "extra");
   return data;
 }
 
@@ -287,12 +265,10 @@ function budgetLineData(values: Record<string, unknown>, sheet?: string) {
   data.sheet ??= "Altro";
   maybeSetText(data, values, "externalId");
   maybeSetText(data, values, "nome");
-  maybeSetText(data, values, "stato");
   maybeSetText(data, values, "activityId");
   maybeSetText(data, values, "commessaId");
   maybeSetText(data, values, "offerId");
   maybeSetDecimal(data, values, "importo");
-  maybeSetJson(data, values, "extra");
   return data;
 }
 
@@ -302,11 +278,6 @@ function commessaData(values: Record<string, unknown>) {
   maybeSetInt(data, values, "anno");
   maybeSetText(data, values, "nome");
   maybeSetText(data, values, "codice");
-  maybeSetText(data, values, "progetto");
-  maybeSetText(data, values, "bu");
-  maybeSetText(data, values, "tipologia");
-  maybeSetText(data, values, "stato");
-  maybeSetJson(data, values, "extra");
   return data;
 }
 
@@ -381,22 +352,19 @@ export async function getDashboardData() {
   ]);
 
   const mappedOffers = offers.map(mapOffer);
-  const finalAmount = mappedOffers.reduce((sum, offer) => sum + Number(offer.importoFinale), 0);
+  const approvedAmount = mappedOffers.reduce((sum, offer) => sum + Number(offer.importoApprovato), 0);
   const offeredAmount = mappedOffers.reduce((sum, offer) => sum + Number(offer.importoInOfferta), 0);
   const budgetLineAmount = lines.reduce((sum, line) => sum + decimalToNumber(line.importo), 0);
 
-  const byProject: Record<string, { label: string; total: number; count: number }> = {};
-  const byStatus: Record<string, { label: string; total: number; count: number }> = {};
-  const byBu: Record<string, { label: string; total: number; count: number }> = {};
+  const byOffer: Record<string, { label: string; total: number; count: number }> = {};
+  const byCommessa: Record<string, { label: string; total: number; count: number }> = {};
+  const byActivity: Record<string, { label: string; total: number; count: number }> = {};
 
   for (const line of lines) {
     const amount = decimalToNumber(line.importo);
-    addToGroup(byProject, line.sheet, amount);
-    addToGroup(byStatus, line.stato, amount);
-  }
-
-  for (const commessa of commesse) {
-    addToGroup(byBu, commessa.bu, budgetLineTotal(commessa.budgetLines));
+    addToGroup(byOffer, relationLabel([line.offer?.externalId, line.offer?.codice ?? line.offer?.nome]) || line.offerId, amount);
+    addToGroup(byCommessa, relationLabel([line.commessa?.codice, line.commessa?.nome]) || line.commessaId, amount);
+    addToGroup(byActivity, relationLabel([line.activity?.externalId, line.activity?.attivita]) || line.activityId, amount);
   }
 
   const incompleteBudgetLines = lines.filter((line) => !line.offerId || !line.commessaId || !line.activityId);
@@ -407,9 +375,9 @@ export async function getDashboardData() {
     ...mappedOffers.slice(0, 6).map((offer) => ({
       id: offer.id,
       type: "Offer",
-      title: relationLabel([offer.externalId, offer.nome]) || "Offer senza nome",
-      amount: offer.importoFinale,
-      status: offer.stato,
+      title: relationLabel([offer.externalId, offer.codice]) || "Offer senza codice",
+      amount: offer.importoApprovato,
+      status: null,
       updatedAt: offer.updatedAt
     })),
     ...lines.slice(0, 6).map((line) => ({
@@ -417,7 +385,7 @@ export async function getDashboardData() {
       type: "Budget line",
       title: relationLabel([line.externalId, line.nome]) || "Budget line senza nome",
       amount: decimalToNumber(line.importo),
-      status: line.stato,
+      status: null,
       updatedAt: line.updatedAt.toISOString()
     })),
     ...activities.slice(0, 6).map((activity) => ({
@@ -438,15 +406,15 @@ export async function getDashboardData() {
       activities: activities.length,
       budgetLines: lines.length,
       commesse: commesse.length,
-      finalAmount,
+      approvedAmount,
       offeredAmount,
-      gap: offeredAmount - finalAmount,
+      gap: offeredAmount - approvedAmount,
       budgetLineAmount
     },
-    byProject: Object.values(byProject).sort((a, b) => b.total - a.total),
-    byStatus: Object.values(byStatus).sort((a, b) => b.total - a.total),
-    byBu: Object.values(byBu).sort((a, b) => b.total - a.total),
-    prepareQueue: mappedOffers.filter((offer) => offer.preparaOfferta).slice(0, 8),
+    byOffer: Object.values(byOffer).sort((a, b) => b.total - a.total),
+    byCommessa: Object.values(byCommessa).sort((a, b) => b.total - a.total),
+    byActivity: Object.values(byActivity).sort((a, b) => b.total - a.total),
+    prepareQueue: mappedOffers.slice(0, 8),
     recent,
     warnings: [
       {
@@ -465,6 +433,102 @@ export async function getDashboardData() {
         severity: commesseWithoutBudget.length > 0 ? "medium" : "ok"
       }
     ]
+  };
+}
+
+export async function getBillingOfferOptions() {
+  const offers = await prisma.offer.findMany({
+    orderBy: [{ anno: "desc" }, { codice: "asc" }],
+    select: {
+      id: true,
+      externalId: true,
+      codice: true,
+      nome: true,
+      progetto: true,
+      anno: true
+    }
+  });
+
+  return offers.map((offer) => ({
+    id: offer.id,
+    codice: offer.codice ?? offer.nome ?? "",
+    nome: offer.nome,
+    externalId: offer.externalId,
+    progetto: offer.progetto,
+    anno: offer.anno
+  }));
+}
+
+export async function getBillingOffer(query: string) {
+  const value = query.trim();
+  if (!value) return null;
+
+  const offerByExactMatch = await prisma.offer.findFirst({
+    where: {
+      OR: [
+        { codice: { equals: value, mode: "insensitive" } },
+        { externalId: { equals: value, mode: "insensitive" } },
+        { nome: { equals: value, mode: "insensitive" } }
+      ]
+    },
+    include: {
+      budgetLines: {
+        include: {
+          activity: true,
+          commessa: true
+        },
+        orderBy: [{ externalId: "asc" }, { nome: "asc" }]
+      }
+    }
+  });
+  const offer =
+    offerByExactMatch ??
+    (await prisma.offer.findFirst({
+      where: {
+        OR: [
+          { codice: { contains: value, mode: "insensitive" } },
+          { externalId: { contains: value, mode: "insensitive" } },
+          { nome: { contains: value, mode: "insensitive" } }
+        ]
+      },
+      orderBy: [{ updatedAt: "desc" }, { codice: "asc" }],
+      include: {
+        budgetLines: {
+          include: {
+            activity: true,
+            commessa: true
+          },
+          orderBy: [{ externalId: "asc" }, { nome: "asc" }]
+        }
+      }
+    }));
+
+  if (!offer) return null;
+
+  const lines = offer.budgetLines.map((line) => ({
+    id: line.id,
+    externalId: line.externalId,
+    nome: line.nome,
+    commessa: line.commessa ? relationLabel([line.commessa.codice, line.commessa.nome]) : "",
+    attivita: line.activity ? relationLabel([line.activity.externalId, line.activity.attivita]) : "",
+    importo: decimalToNumber(line.importo)
+  }));
+
+  return {
+    offer: {
+      id: offer.id,
+      externalId: offer.externalId,
+      codice: offer.codice ?? offer.nome ?? "",
+      progetto: offer.progetto,
+      anno: offer.anno,
+      importoApprovato: decimalToNumber(offer.importoApprovato),
+      importoOfferta: decimalToNumber(offer.importoInOfferta)
+    },
+    lines,
+    totals: {
+      count: lines.length,
+      importo: lines.reduce((sum, line) => sum + line.importo, 0)
+    }
   };
 }
 

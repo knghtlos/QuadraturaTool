@@ -10,11 +10,13 @@ datasource db {
 model Offer {
   id               String       @id @default(cuid())
   externalId       String?      @unique
+  codice           String?
   nome             String?
   progetto         String?
   anno             Int?
   stato            String?
   rey              String?
+  importoApprovato Decimal?     @db.Decimal(14, 2)
   importoInOfferta Decimal?     @db.Decimal(14, 2)
   preparaOfferta   Boolean      @default(false)
   extra            Json?
@@ -23,6 +25,7 @@ model Offer {
   budgetLines      BudgetLine[]
 
   @@index([anno])
+  @@index([codice])
   @@index([progetto])
   @@index([stato])
 }

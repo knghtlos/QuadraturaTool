@@ -6,14 +6,16 @@ import {
   type ColumnDef,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
+  type PaginationState,
   type SortingState,
   useReactTable
 } from "@tanstack/react-table";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { ArrowDownUp, Check, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowDownUp, Check, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -206,84 +208,18 @@ function MobileRecordCards({
   );
 }
 
-function EditableCell({
+function ReadOnlyCell({
   row,
-  field,
-  records,
-  lookups,
-  onSave
+  field
 }: {
   row: RecordRow;
   field: FieldConfig;
-  records: RecordRow[];
-  lookups: LookupPayload | null;
-  onSave: (id: string, key: string, value: unknown) => void;
 }) {
-  const [value, setValue] = useState(primitiveValue(row[field.key]));
-  const options = fieldOptions(field, lookups, records);
-
-  useEffect(() => {
-    setValue(primitiveValue(row[field.key]));
-  }, [row, field.key]);
-
-  if (field.readonly || field.type === "derived") {
-    return <div className="min-h-8 rounded-md px-2 py-1.5">{formatCell(row, field)}</div>;
-  }
-
   if (field.type === "json") {
-    return <div className="max-w-64 truncate text-muted-foreground">{displayValue(row, field)}</div>;
+    return <div className="max-w-64 truncate px-2 py-1.5 text-muted-foreground">{displayValue(row, field)}</div>;
   }
 
-  if (field.type === "boolean") {
-    return (
-      <button
-        type="button"
-        className={cn(
-          "flex size-7 items-center justify-center rounded-md border transition-colors",
-          row[field.key] ? "bg-primary text-primary-foreground" : "bg-background text-transparent"
-        )}
-        onClick={() => onSave(row.id, field.key, !row[field.key])}
-        title={field.label}
-      >
-        <Check className="size-4" />
-      </button>
-    );
-  }
-
-  if ((field.type === "select" && options.length > 0) || field.type === "relation") {
-    const current = primitiveValue(row[field.key]);
-    const allOptions = current && !options.some((option) => option.value === current) ? [{ value: current, label: displayValue(row, field) }, ...options] : options;
-    return (
-      <select
-        className="h-8 min-w-36 rounded-md border bg-background px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        value={current}
-        onChange={(event) => onSave(row.id, field.key, event.target.value || null)}
-      >
-        <option value="">-</option>
-        {allOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  const inputType = field.type === "date" ? "date" : field.type === "number" || field.type === "currency" || field.type === "percent" ? "number" : "text";
-
-  return (
-    <Input
-      type={inputType}
-      className="h-8 min-w-28 border-transparent bg-transparent px-2 shadow-none hover:border-input hover:bg-background focus:bg-background"
-      value={field.type === "date" ? toDateInput(value) : value}
-      onChange={(event) => setValue(event.target.value)}
-      onBlur={() => {
-        if (value !== primitiveValue(row[field.key])) {
-          onSave(row.id, field.key, value);
-        }
-      }}
-    />
-  );
+  return <div className="min-h-8 px-2 py-1.5">{formatCell(row, field)}</div>;
 }
 
 function RecordDialog({
@@ -415,36 +351,45 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 50 });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeRecord, setActiveRecord] = useState<RecordRow | null>(null);
-  const [savingCell, setSavingCell] = useState<string | null>(null);
-  const tableFields = config.fields.filter((field) => field.table);
-  const filterFields = config.fields.filter((field) => field.filter);
+  const tableFields = useMemo(() => config.fields.filter((field) => field.table), [config.fields]);
+  const filterFields = useMemo(() => config.fields.filter((field) => field.filter), [config.fields]);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
-    const [recordsResponse, lookupsResponse] = await Promise.all([
-      fetch(`/api/records/${sheetKey}`, { cache: "no-store", signal }),
-      fetch("/api/options", { cache: "no-store", signal })
-    ]);
-    const recordsPayload = await recordsResponse.json();
-    const lookupsPayload = await lookupsResponse.json();
 
-    if (signal?.aborted) return;
+    try {
+      const [recordsResponse, lookupsResponse] = await Promise.all([
+        fetch(`/api/records/${sheetKey}`, { cache: "no-store", signal }),
+        fetch("/api/options", { cache: "no-store", signal })
+      ]);
+      const recordsPayload = await recordsResponse.json();
+      const lookupsPayload = await lookupsResponse.json();
 
-    if (!recordsResponse.ok) {
-      setError(recordsPayload.error ?? "Impossibile caricare il foglio");
+      if (signal?.aborted) return;
+
+      if (!recordsResponse.ok) {
+        setError(recordsPayload.error ?? "Impossibile caricare il foglio");
+        setRecords([]);
+      } else {
+        setRecords(recordsPayload.records ?? []);
+      }
+
+      if (lookupsResponse.ok) {
+        setLookups(lookupsPayload);
+      }
+    } catch (error) {
+      if (signal?.aborted) return;
+      setError(error instanceof Error ? error.message : "Impossibile caricare il foglio");
       setRecords([]);
-    } else {
-      setRecords(recordsPayload.records ?? []);
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
-
-    if (lookupsResponse.ok) {
-      setLookups(lookupsPayload);
-    }
-
-    setLoading(false);
   }, [sheetKey]);
 
   useEffect(() => {
@@ -452,15 +397,11 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
     setRecords([]);
     setFilters({});
     setSorting([]);
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
     setDialogOpen(false);
     setActiveRecord(null);
-    setSavingCell(null);
-    load(controller.signal).catch((error: unknown) => {
-      if (controller.signal.aborted) return;
-      setError(error instanceof Error ? error.message : "Impossibile caricare il foglio");
-      setLoading(false);
-    });
-    const refresh = () => load();
+    void load(controller.signal);
+    const refresh = () => void load();
     const globalSearch = (event: Event) => {
       const customEvent = event as CustomEvent<string>;
       setQuery(customEvent.detail ?? "");
@@ -475,6 +416,10 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
   }, [load]);
 
   useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }, [query, filters, sorting]);
+
+  useEffect(() => {
     setQuery(searchParams.get("q") ?? "");
   }, [searchParams]);
 
@@ -485,51 +430,42 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
     });
   }, [records, config.fields, query, filterFields, filters]);
 
-  const patchCell = useCallback(async (id: string, key: string, value: unknown) => {
-    setSavingCell(`${id}:${key}`);
-    const response = await fetch(`/api/records/${sheetKey}/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [key]: value })
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      setError(payload.error ?? "Salvataggio non riuscito");
-    } else {
+  async function saveRecord(values: RecordFormValues) {
+    try {
+      const response = await fetch(activeRecord ? `/api/records/${sheetKey}/${activeRecord.id}` : `/api/records/${sheetKey}`, {
+        method: activeRecord ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values)
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.error ?? "Salvataggio non riuscito");
+        return;
+      }
       setRecords(payload.records ?? []);
       setError(null);
       window.dispatchEvent(new Event("governance:data-refresh"));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Salvataggio non riuscito");
     }
-    setSavingCell(null);
-  }, [sheetKey]);
-
-  async function saveRecord(values: RecordFormValues) {
-    const response = await fetch(activeRecord ? `/api/records/${sheetKey}/${activeRecord.id}` : `/api/records/${sheetKey}`, {
-      method: activeRecord ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values)
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      setError(payload.error ?? "Salvataggio non riuscito");
-      return;
-    }
-    setRecords(payload.records ?? []);
-    setError(null);
-    window.dispatchEvent(new Event("governance:data-refresh"));
   }
 
   const removeRecord = useCallback(async (record: RecordRow) => {
     const label = displayValue(record, tableFields[1] ?? tableFields[0]);
     if (!window.confirm(`Eliminare "${label || record.id}"?`)) return;
-    const response = await fetch(`/api/records/${sheetKey}/${record.id}`, { method: "DELETE" });
-    const payload = await response.json();
-    if (!response.ok) {
-      setError(payload.error ?? "Eliminazione non riuscita");
-      return;
+
+    try {
+      const response = await fetch(`/api/records/${sheetKey}/${record.id}`, { method: "DELETE" });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.error ?? "Eliminazione non riuscita");
+        return;
+      }
+      setRecords(payload.records ?? []);
+      window.dispatchEvent(new Event("governance:data-refresh"));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Eliminazione non riuscita");
     }
-    setRecords(payload.records ?? []);
-    window.dispatchEvent(new Event("governance:data-refresh"));
   }, [sheetKey, tableFields]);
 
   const columns = useMemo<ColumnDef<RecordRow>[]>(() => {
@@ -544,9 +480,8 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
           </button>
         ),
         cell: ({ row }) => (
-          <div className="relative" style={{ minWidth: field.width ? `${field.width}px` : undefined }}>
-            <EditableCell row={row.original} field={field} records={records} lookups={lookups} onSave={patchCell} />
-            {savingCell === `${row.original.id}:${field.key}` ? <Loader2 className="absolute right-1 top-2 size-3 animate-spin text-muted-foreground" /> : null}
+          <div style={{ minWidth: field.width ? `${field.width}px` : undefined }}>
+            <ReadOnlyCell row={row.original} field={field} />
           </div>
         )
       })),
@@ -573,16 +508,21 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
         )
       }
     ];
-  }, [tableFields, records, lookups, savingCell, patchCell, removeRecord]);
+  }, [tableFields, removeRecord]);
 
   const table = useReactTable({
     data: filteredRecords,
     columns,
-    state: { sorting },
+    state: { sorting, pagination },
     onSortingChange: setSorting,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel()
   });
+
+  const visibleRows = table.getRowModel().rows;
+  const pageCount = table.getPageCount();
 
   return (
     <div className="space-y-4">
@@ -642,7 +582,7 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
           {error ? <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
 
           <MobileRecordCards
-            rows={table.getRowModel().rows.map((row) => row.original)}
+            rows={visibleRows.map((row) => row.original)}
             fields={tableFields}
             loading={loading}
             recordsCount={records.length}
@@ -673,14 +613,14 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
                       Caricamento...
                     </TableCell>
                   </TableRow>
-                ) : table.getRowModel().rows.length === 0 ? (
+                ) : visibleRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
                       Nessun record.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  table.getRowModel().rows.map((row) => (
+                  visibleRows.map((row) => (
                     <TableRow key={row.id}>
                       {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
@@ -691,6 +631,38 @@ export function SheetClient({ sheetKey }: { sheetKey: SheetKey }) {
               </TableBody>
             </Table>
           </div>
+
+          {filteredRecords.length > 0 ? (
+            <div className="flex flex-col gap-2 border-t pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <span>Righe per pagina</span>
+                <select
+                  className="h-8 rounded-md border bg-background px-2 text-xs"
+                  value={pagination.pageSize}
+                  onChange={(event) => table.setPageSize(Number(event.target.value))}
+                >
+                  {[25, 50, 100, 200].map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-2 sm:justify-end">
+                <span>
+                  Pagina {Math.min(pagination.pageIndex + 1, Math.max(pageCount, 1))} di {Math.max(pageCount, 1)}
+                </span>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="icon" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} title="Pagina precedente">
+                    <ChevronLeft />
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} title="Pagina successiva">
+                    <ChevronRight />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

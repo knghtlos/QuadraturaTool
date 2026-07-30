@@ -1,7 +1,7 @@
 import readXlsxFile, { type Sheet as ReadWorkbookSheet } from "read-excel-file/node";
 import writeXlsxFile, { type Sheet as WriteWorkbookSheet, type SheetData } from "write-excel-file/node";
 import { Prisma } from "@prisma/client";
-import { toBoolean, toDate, toDecimal, toInteger, toStringOrNull } from "@/lib/coercion";
+import { toDate, toDecimal, toInteger, toStringOrNull } from "@/lib/coercion";
 import { getDashboardData, getRecords } from "@/lib/repository";
 import { prisma } from "@/lib/prisma";
 import { sheetConfigs, type FieldConfig, type SheetConfig } from "@/lib/sheets";
@@ -99,16 +99,15 @@ function rowReader(row: RawRow, fields: FieldConfig[]) {
 
 function offerDataFromRow(row: RawRow, config: SheetConfig) {
   const reader = rowReader(row, config.fields);
+  const codice = toStringOrNull(reader.get("codice"));
   return {
     externalId: toStringOrNull(reader.get("externalId")),
-    nome: toStringOrNull(reader.get("nome")),
+    codice,
+    nome: codice,
     progetto: toStringOrNull(reader.get("progetto")),
     anno: toInteger(reader.get("anno")),
-    stato: toStringOrNull(reader.get("stato")),
-    rey: toStringOrNull(reader.get("rey")),
-    importoInOfferta: toDecimal(reader.get("importoInOfferta")),
-    preparaOfferta: toBoolean(reader.get("preparaOfferta")),
-    extra: reader.extra() as Prisma.JsonObject | null
+    importoApprovato: toDecimal(reader.get("importoApprovato")),
+    importoInOfferta: toDecimal(reader.get("importoInOfferta"))
   };
 }
 
@@ -144,14 +143,9 @@ function commessaDataFromRow(row: RawRow, config: SheetConfig) {
   const reader = rowReader(row, config.fields);
   return {
     externalId: toStringOrNull(reader.get("externalId")),
-    anno: toInteger(reader.get("anno")),
-    nome: toStringOrNull(reader.get("nome")),
     codice: toStringOrNull(reader.get("codice")),
-    progetto: toStringOrNull(reader.get("progetto")),
-    bu: toStringOrNull(reader.get("bu")),
-    tipologia: toStringOrNull(reader.get("tipologia")),
-    stato: toStringOrNull(reader.get("stato")),
-    extra: reader.extra() as Prisma.JsonObject | null
+    nome: toStringOrNull(reader.get("nome")),
+    anno: toInteger(reader.get("anno"))
   };
 }
 
@@ -162,9 +156,7 @@ function budgetLineRawFromRow(row: RawRow, config: SheetConfig) {
       externalId: toStringOrNull(reader.get("externalId")),
       sheet: config.project ?? toStringOrNull(reader.get("sheet")) ?? "Altro",
       nome: toStringOrNull(reader.get("nome")),
-      stato: toStringOrNull(reader.get("stato")),
-      importo: toDecimal(reader.get("importo")),
-      extra: reader.extra() as Prisma.JsonObject | null
+      importo: toDecimal(reader.get("importo"))
     },
     activityValue: toStringOrNull(reader.get("activityId")),
     commessaValue: toStringOrNull(reader.get("commessaId")),
@@ -198,7 +190,15 @@ async function relationMaps() {
     offer(value: string | null) {
       if (!value) return null;
       return (
-        offers.find((offer) => matchText(value, [offer.id, offer.externalId, offer.nome, `${offer.externalId} ${offer.nome}`]))
+        offers.find((offer) =>
+          matchText(value, [
+            offer.id,
+            offer.externalId,
+            offer.codice,
+            offer.nome,
+            `${offer.externalId} ${offer.codice ?? offer.nome}`
+          ])
+        )
           ?.id ?? null
       );
     },
@@ -437,23 +437,23 @@ export async function buildWorkbookBuffer() {
     { Blocco: "KPI", Metrica: "Activities", Valore: dashboard.kpis.activities },
     { Blocco: "KPI", Metrica: "BudgetLines", Valore: dashboard.kpis.budgetLines },
     { Blocco: "KPI", Metrica: "Commesse", Valore: dashboard.kpis.commesse },
-    { Blocco: "KPI", Metrica: "Importo finale", Valore: dashboard.kpis.finalAmount },
-    { Blocco: "KPI", Metrica: "Importo in offerta", Valore: dashboard.kpis.offeredAmount },
+    { Blocco: "KPI", Metrica: "Importo approvato", Valore: dashboard.kpis.approvedAmount },
+    { Blocco: "KPI", Metrica: "Importo offerta", Valore: dashboard.kpis.offeredAmount },
     { Blocco: "KPI", Metrica: "Gap", Valore: dashboard.kpis.gap },
-    ...dashboard.byProject.map((item) => ({
-      Blocco: "Progetto",
+    ...dashboard.byOffer.map((item) => ({
+      Blocco: "Offerta",
       Metrica: item.label,
       Valore: item.total,
       Record: item.count
     })),
-    ...dashboard.byStatus.map((item) => ({
-      Blocco: "Stato",
+    ...dashboard.byCommessa.map((item) => ({
+      Blocco: "Commessa",
       Metrica: item.label,
       Valore: item.total,
       Record: item.count
     })),
-    ...dashboard.byBu.map((item) => ({
-      Blocco: "BU",
+    ...dashboard.byActivity.map((item) => ({
+      Blocco: "Attività",
       Metrica: item.label,
       Valore: item.total,
       Record: item.count

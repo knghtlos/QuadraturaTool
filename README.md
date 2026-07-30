@@ -20,12 +20,10 @@ La home si chiama `General` e mostra dashboard, KPI, aggregazioni e warning.
 
 ## Logica principale
 
-- `Offer.Importo finale` = somma delle budget line collegate.
-- `Offer.Sconto` = `Importo in offerta - Importo finale`.
-- `Commessa.Nome-Codice` = `Codice - Nome`.
-- `Commessa.Budget` = somma delle budget line collegate.
-- Le budget line collegano offer, activity e commessa.
-- I campi derivati sono calcolati lato dominio/API, non salvati come valori statici.
+- `BudgetLines` contiene `ID`, `Nome`, `Commessa`, `Attività`, `Importo`, `Offerta`.
+- `Offers` contiene `ID`, `Codice`, `Anno`, `Progetto`, `Importo approvato`, `Importo offerta`.
+- `Commesse` contiene `ID`, `Codice`, `Nome`, `Anno`.
+- Le budget line collegano offerta, attività e commessa.
 
 ## Setup locale
 
@@ -34,10 +32,11 @@ npm install
 cp .env.example .env
 npm run db:deploy
 npm run db:generate
-npm run dev -- -p 7321
+npm run dev
 ```
 
 Imposta `DATABASE_URL` in `.env` usando PostgreSQL locale, Neon, Supabase o Vercel Postgres.
+Lo script `dev` avvia l'app su `http://localhost:7333`.
 
 ## Import dati
 

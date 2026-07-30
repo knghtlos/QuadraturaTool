@@ -1,4 +1,4 @@
-import { BarChart3, BriefcaseBusiness, ClipboardList, Euro, FileSpreadsheet } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, ClipboardList, Euro, FileSpreadsheet, Mail } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type SheetKey = "activities" | "budget-lines" | "offers" | "commesse";
@@ -85,42 +85,27 @@ export const activityFields: FieldConfig[] = [
 
 export const budgetLineFields: FieldConfig[] = [
   { key: "externalId", label: "ID", type: "text", table: true, width: 90 },
-  { key: "sheet", label: "Progetto", type: "text", table: true, filter: true },
   { key: "nome", label: "Nome", type: "text", table: true, width: 260 },
-  { key: "activityId", label: "Activities", type: "relation", lookupType: "activities", table: true, filter: true },
-  { key: "stato", label: "Stato", type: "select", optionType: "STATO_BL", table: true, filter: true },
   { key: "commessaId", label: "Commessa", type: "relation", lookupType: "commesse", table: true, filter: true },
-  { key: "offerId", label: "Offers", type: "relation", lookupType: "offers", table: true, filter: true },
+  { key: "activityId", label: "Attività", aliases: ["Activity", "Activities"], type: "relation", lookupType: "activities", table: true, filter: true },
   { key: "importo", label: "Importo", type: "currency", table: true },
-  { key: "extra", label: "Extra", type: "json" }
+  { key: "offerId", label: "Offerta", aliases: ["Offer", "Offers"], type: "relation", lookupType: "offers", table: true, filter: true }
 ];
 
 export const offerFields: FieldConfig[] = [
   { key: "externalId", label: "ID", type: "text", table: true, width: 90 },
-  { key: "nome", label: "Nome", type: "text", table: true, width: 260 },
-  { key: "progetto", label: "Progetto", type: "text", table: true, filter: true },
+  { key: "codice", label: "Codice", aliases: ["Nome", "REY", "Codice REY"], type: "text", table: true, width: 180 },
   { key: "anno", label: "Anno", type: "number", table: true, filter: true },
-  { key: "stato", label: "Stato", type: "select", optionType: "STATO_OFFERTA", table: true, filter: true },
-  { key: "rey", label: "REY", type: "text", table: true },
-  { key: "importoFinale", label: "Importo finale", type: "derived", readonly: true, table: true },
-  { key: "importoInOfferta", label: "Importo in offerta", type: "currency", table: true },
-  { key: "sconto", label: "Sconto", type: "derived", readonly: true, table: true },
-  { key: "preparaOfferta", label: "Prepara Offerta", type: "boolean", table: true, filter: true },
-  { key: "extra", label: "Extra", type: "json" }
+  { key: "progetto", label: "Progetto", type: "text", table: true, filter: true },
+  { key: "importoApprovato", label: "Importo approvato", aliases: ["Importo finale"], type: "currency", table: true },
+  { key: "importoInOfferta", label: "Importo offerta", aliases: ["Importo in offerta"], type: "currency", table: true }
 ];
 
 export const commessaFields: FieldConfig[] = [
   { key: "externalId", label: "ID", type: "text", table: true, width: 90 },
-  { key: "anno", label: "Anno", type: "number", table: true, filter: true },
-  { key: "nome", label: "Nome", type: "text", table: true, width: 220 },
   { key: "codice", label: "Codice", type: "text", table: true },
-  { key: "nomeCodice", label: "Nome-Codice", type: "derived", readonly: true, table: true, width: 260 },
-  { key: "progetto", label: "Progetto", type: "text", table: true, filter: true },
-  { key: "bu", label: "BU", type: "text", table: true, filter: true },
-  { key: "budget", label: "Budget", type: "derived", readonly: true, table: true },
-  { key: "tipologia", label: "Tipologia", type: "select", optionType: "TIPOLOGIA_COMMESSA", table: true, filter: true },
-  { key: "stato", label: "Stato", type: "select", optionType: "STATO_COMMESSA", table: true, filter: true },
-  { key: "extra", label: "Extra", type: "json" }
+  { key: "nome", label: "Nome", type: "text", table: true, width: 220 },
+  { key: "anno", label: "Anno", type: "number", table: true, filter: true }
 ];
 
 export const sheetConfigs: Record<SheetKey, SheetConfig> = {
@@ -139,7 +124,7 @@ export const sheetConfigs: Record<SheetKey, SheetConfig> = {
     workbookName: "BudgetLines",
     title: "BudgetLines",
     shortTitle: "BudgetLines",
-    description: "Budget line aggregate collegate ad activity, commessa e offer.",
+    description: "Budget line con commessa, attività, importo e offerta collegata.",
     icon: Euro,
     kind: "budgetLines",
     fields: budgetLineFields
@@ -149,7 +134,7 @@ export const sheetConfigs: Record<SheetKey, SheetConfig> = {
     workbookName: "Offers",
     title: "Offers",
     shortTitle: "Offers",
-    description: "Offerte, importi finali e stato di preparazione.",
+    description: "Offerte con codice, progetto, anno e importi approvati/offerta.",
     icon: FileSpreadsheet,
     kind: "offers",
     fields: offerFields
@@ -159,7 +144,7 @@ export const sheetConfigs: Record<SheetKey, SheetConfig> = {
     workbookName: "Commesse",
     title: "Commesse",
     shortTitle: "Commesse",
-    description: "Commesse, budget calcolato e classificazione.",
+    description: "Commesse con codice, nome e anno.",
     icon: BriefcaseBusiness,
     kind: "commesse",
     fields: commessaFields
@@ -191,6 +176,11 @@ export const navigationItems = [
     title: "Commesse",
     href: "/sheets/commesse",
     icon: BriefcaseBusiness
+  },
+  {
+    title: "Fatturazione",
+    href: "/billing",
+    icon: Mail
   }
 ];
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
@@ -11,15 +12,22 @@ import { navigationItems } from "@/lib/sheets";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [searchValue, setSearchValue] = useState("");
+
+  useEffect(() => {
+    setSearchValue(new URLSearchParams(window.location.search).get("q") ?? "");
+  }, [pathname]);
 
   function handleSearch(value: string) {
+    setSearchValue(value);
     const params = new URLSearchParams(window.location.search);
     if (value.trim()) {
       params.set("q", value);
     } else {
       params.delete("q");
     }
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     window.dispatchEvent(new CustomEvent("governance:global-search", { detail: value }));
   }
 
@@ -30,6 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Link
         key={item.href}
         href={item.href}
+        prefetch={false}
         className={cn(
           "flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
           active && "bg-accent text-accent-foreground"
@@ -70,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Input
                 className="h-9 w-full pl-9 lg:max-w-2xl"
                 placeholder="Cerca"
-                defaultValue={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("q") ?? "" : ""}
+                value={searchValue}
                 onChange={(event) => handleSearch(event.target.value)}
               />
             </div>

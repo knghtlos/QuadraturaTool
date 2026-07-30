@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Euro, FileSpreadsheet, ListChecks, RefreshCw } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -20,14 +20,14 @@ type DashboardData = {
     activities: number;
     budgetLines: number;
     commesse: number;
-    finalAmount: number;
+    approvedAmount: number;
     offeredAmount: number;
     gap: number;
     budgetLineAmount: number;
   };
-  byProject: GroupItem[];
-  byStatus: GroupItem[];
-  byBu: GroupItem[];
+  byOffer: GroupItem[];
+  byCommessa: GroupItem[];
+  byActivity: GroupItem[];
   prepareQueue: Array<Record<string, unknown>>;
   recent: Array<{
     id: string;
@@ -163,26 +163,43 @@ export function DashboardClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
-    const response = await fetch("/api/dashboard", { cache: "no-store" });
-    const payload = await response.json();
-    if (!response.ok) {
-      setError(payload.error ?? "Dashboard non disponibile");
+
+    try {
+      const response = await fetch("/api/dashboard", { cache: "no-store", signal });
+      const payload = await response.json();
+
+      if (signal?.aborted) return;
+
+      if (!response.ok) {
+        setError(payload.error ?? "Dashboard non disponibile");
+        setData(null);
+      } else {
+        setData(payload);
+      }
+    } catch (error) {
+      if (signal?.aborted) return;
+      setError(error instanceof Error ? error.message : "Dashboard non disponibile");
       setData(null);
-    } else {
-      setData(payload);
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
-    setLoading(false);
-  }
+  }, []);
 
   useEffect(() => {
-    load();
-    const refresh = () => load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    const refresh = () => void load();
     window.addEventListener("governance:data-refresh", refresh);
-    return () => window.removeEventListener("governance:data-refresh", refresh);
-  }, []);
+    return () => {
+      controller.abort();
+      window.removeEventListener("governance:data-refresh", refresh);
+    };
+  }, [load]);
 
   if (loading && !data) {
     return <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">Caricamento dashboard...</div>;
@@ -193,7 +210,7 @@ export function DashboardClient() {
       <div className="rounded-lg border bg-card p-6">
         <div className="font-medium">Dashboard non disponibile</div>
         <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-        <Button className="mt-4" variant="outline" onClick={load}>
+        <Button className="mt-4" variant="outline" onClick={() => void load()}>
           <RefreshCw />
           Riprova
         </Button>
@@ -210,19 +227,19 @@ export function DashboardClient() {
           <h1 className="truncate text-xl font-semibold tracking-normal sm:text-2xl">General</h1>
           <p className="mt-1 text-sm text-muted-foreground">Dashboard riepilogativa di offerte, commesse, activities e budget line.</p>
         </div>
-        <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={load} disabled={loading}>
+        <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={loading ? "animate-spin" : ""} />
           Aggiorna
         </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard title="Importo finale" value={formatCurrency(data.kpis.finalAmount)} caption="Somma budget line collegate alle offer" icon={Euro} />
-        <KpiCard title="Importo in offerta" value={formatCurrency(data.kpis.offeredAmount)} caption="Valori commerciali inseriti nelle offer" icon={FileSpreadsheet} />
+        <KpiCard title="Importo approvato" value={formatCurrency(data.kpis.approvedAmount)} caption="Valori approvati sulle offerte" icon={Euro} />
+        <KpiCard title="Importo offerta" value={formatCurrency(data.kpis.offeredAmount)} caption="Valori offerta inseriti sulle offerte" icon={FileSpreadsheet} />
         <KpiCard
-          title="Gap offerta/finale"
+          title="Gap offerta/approvato"
           value={formatCurrency(data.kpis.gap)}
-          caption="Importo in offerta meno importo finale"
+          caption="Importo offerta meno importo approvato"
           icon={data.kpis.gap >= 0 ? ArrowUpRight : ArrowDownRight}
           trend={data.kpis.gap >= 0 ? "up" : "down"}
         />
@@ -232,29 +249,29 @@ export function DashboardClient() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Totali per progetto</CardTitle>
-            <CardDescription>Budget line aggregate per area.</CardDescription>
+            <CardTitle>Budget line per offerta</CardTitle>
+            <CardDescription>Importi aggregati per offerta collegata.</CardDescription>
           </CardHeader>
           <CardContent>
-            <GroupList items={data.byProject} emptyLabel="Nessuna budget line importata." />
+            <GroupList items={data.byOffer} emptyLabel="Nessuna budget line importata." />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Totali per stato</CardTitle>
-            <CardDescription>Importi per stato budget line.</CardDescription>
+            <CardTitle>Budget line per commessa</CardTitle>
+            <CardDescription>Importi aggregati per commessa collegata.</CardDescription>
           </CardHeader>
           <CardContent>
-            <GroupList items={data.byStatus} emptyLabel="Nessuno stato disponibile." />
+            <GroupList items={data.byCommessa} emptyLabel="Nessuna commessa collegata." />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Budget per BU</CardTitle>
-            <CardDescription>Somme commesse ricavate dalle budget line.</CardDescription>
+            <CardTitle>Budget line per attività</CardTitle>
+            <CardDescription>Importi aggregati per attività collegata.</CardDescription>
           </CardHeader>
           <CardContent>
-            <GroupList items={data.byBu} emptyLabel="Nessuna BU valorizzata." />
+            <GroupList items={data.byActivity} emptyLabel="Nessuna attività collegata." />
           </CardContent>
         </Card>
       </div>
@@ -273,20 +290,20 @@ export function DashboardClient() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Offerte da preparare</CardTitle>
-              <CardDescription>Azione operativa dal campo Prepara Offerta.</CardDescription>
+              <CardTitle>Offerte recenti</CardTitle>
+              <CardDescription>Ultime offerte aggiornate con importo approvato.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {data.prepareQueue.length === 0 ? (
-                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Nessuna offer in preparazione.</div>
+                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Nessuna offerta presente.</div>
               ) : (
                 data.prepareQueue.map((offer) => (
                   <div key={String(offer.id)} className="flex items-center justify-between gap-3 rounded-md border p-2">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{String(offer.nome ?? offer.externalId ?? "Offer")}</div>
+                      <div className="truncate text-sm font-medium">{String(offer.codice ?? offer.externalId ?? "Offer")}</div>
                       <div className="text-xs text-muted-foreground">{String(offer.progetto ?? "Progetto non assegnato")}</div>
                     </div>
-                    <div className="shrink-0 text-sm">{formatCurrency(Number(offer.importoFinale ?? 0))}</div>
+                    <div className="shrink-0 text-sm">{formatCurrency(Number(offer.importoApprovato ?? 0))}</div>
                   </div>
                 ))
               )}
